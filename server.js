@@ -13,6 +13,8 @@ const FormData = require('form-data');
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 const app = express();
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ limit: '15mb', extended: true }));
 app.use(cors({
     origin: ["https://pes-park-official.vercel.app", "http://localhost:3000"], // Your Community site URL
     methods: ["GET", "POST"],
@@ -416,35 +418,47 @@ const musicSchema = new mongoose.Schema({
 const Music = mongoose.model('Music', musicSchema);
 app.post('/api/upload-music', upload.single('audio'), async (req, res) => {
     try {
-        if (!req.file) return res.status(400).send("No file uploaded");
+        if (!req.file) {
+            console.log("❌ No file received in req.file");
+            return res.status(400).send("No file uploaded");
+        }
 
-        // 1. Prepare data for Catbox.moe
+        console.log(`📤 Pushing ${req.file.originalname} to Catbox...`);
+
         const form = new FormData();
         form.append('reqtype', 'fileupload');
+        // Ensure the buffer is passed correctly with a filename
         form.append('fileToUpload', req.file.buffer, {
             filename: req.file.originalname,
             contentType: req.file.mimetype,
         });
 
-        // 2. Send to Catbox API
         const response = await axios.post('https://catbox.moe/user/api.php', form, {
-            headers: { ...form.getHeaders() }
+            headers: { ...form.getHeaders() },
+            timeout: 60000 // Give it 60 seconds (important for Render free tier)
         });
 
-        const fileUrl = response.data; // This is the direct .mp3 link
+        // Catbox returns a plain string URL like "https://files.catbox.moe/xxxx.mp3"
+        const fileUrl = response.data.trim();
 
-        // 3. Save to MongoDB
+        if (!fileUrl.includes('http')) {
+            throw new Error("Invalid response from Catbox: " + fileUrl);
+        }
+
         const newTrack = new Music({ url: fileUrl, filename: req.file.originalname });
         await newTrack.save();
 
-        // 4. Notify everyone via Socket
         io.emit('newTrackAdded', fileUrl);
-        io.emit('newMessage', { sender: "RADIO", role: "admin", text: `🎵 New Track Uploaded: ${req.file.originalname}` });
+        io.emit('newMessage', { 
+            sender: "SYSTEM", 
+            role: "admin", 
+            text: `🎵 Radio Sync: ${req.file.originalname} is now in rotation.` 
+        });
 
         res.json({ success: true, url: fileUrl });
     } catch (err) {
-        console.error(err);
-        res.status(500).send("Upload failed");
+        console.error("❌ Upload Route Error:", err.message);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
