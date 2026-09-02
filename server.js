@@ -13,10 +13,10 @@ const FormData = require('form-data');
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 const app = express();
-app.use(express.json({ limit: '20mb' }));
-app.use(express.urlencoded({ limit: '20mb', extended: true }));
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ limit: '25mb', extended: true }));
 app.use(cors({
-    origin: ["https://pes-park-official.vercel.app", "http://localhost:3000"], // Your Community site URL
+    origin: ["https://fluxion-fc-auction.vercel.app", "http://localhost:3000"], // Your Community site URL
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type", "x-api-key"] // This allows the security key to pass through
 }));
