@@ -441,16 +441,17 @@ app.post('/api/upload-music', upload.single('audio'), async (req, res) => {
 io.on('connection', async (socket) => {
     
     // All stats and initial data fetching goes here
-    const [players, teams, chats, stats, history] = await Promise.all([
+    const [players, teams, chats, stats, history, customMusic] = await Promise.all([
         Player.find(),
         Team.find(),
+        Music.find(),
         Chat.find().sort({ timestamp: 1 }).limit(50),
         getStatsObject(),
         History.find().sort({ timestamp: 1 }).limit(70)
     ]);
 
     socket.emit('initialData', {
-        players, teams, chats, state: auctionState, stats, history
+        players, teams, chats, state: auctionState, stats, history, customMusic: customMusic.map(m => m.url)
     });
 
     // --- NEW: AUTHENTICATION EVENTS ---
