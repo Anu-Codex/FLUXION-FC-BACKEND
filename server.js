@@ -13,8 +13,8 @@ const FormData = require('form-data');
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 const app = express();
-app.use(express.json({ limit: '15mb' }));
-app.use(express.urlencoded({ limit: '15mb', extended: true }));
+app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ limit: '20mb', extended: true }));
 app.use(cors({
     origin: ["https://pes-park-official.vercel.app", "http://localhost:3000"], // Your Community site URL
     methods: ["GET", "POST"],
@@ -33,6 +33,7 @@ const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
 
 const upload = multer({ 
     storage: multer.memoryStorage(),
+    limits: { fileSize: 15 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
         // Accept both .mp3 and the standard audio/mpeg type
         if (file.mimetype === "audio/mpeg" || file.mimetype === "audio/mp3" || file.originalname.endsWith('.mp3')) {
