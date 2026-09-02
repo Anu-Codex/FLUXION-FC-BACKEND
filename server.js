@@ -7,6 +7,10 @@ const cors = require('cors');
 const SibApiV3Sdk = require('sib-api-v3-sdk');
 const bcrypt = require('bcryptjs');
 const Groq = require("groq-sdk");
+const multer = require('multer');
+const axios = require('axios');
+const FormData = require('form-data');
+const upload = multer({ storage: multer.memoryStorage() });
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 const app = express();
@@ -391,6 +395,45 @@ app.get('/api/export-results', async (req, res) => {
 
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+const musicSchema = new mongoose.Schema({
+    url: String,
+    filename: String,
+    timestamp: { type: Date, default: Date.now }
+});
+const Music = mongoose.model('Music', musicSchema);
+app.post('/api/upload-music', upload.single('audio'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).send("No file uploaded");
+
+        // 1. Prepare data for Catbox.moe
+        const form = new FormData();
+        form.append('reqtype', 'fileupload');
+        form.append('fileToUpload', req.file.buffer, {
+            filename: req.file.originalname,
+            contentType: req.file.mimetype,
+        });
+
+        // 2. Send to Catbox API
+        const response = await axios.post('https://catbox.moe/user/api.php', form, {
+            headers: { ...form.getHeaders() }
+        });
+
+        const fileUrl = response.data; // This is the direct .mp3 link
+
+        // 3. Save to MongoDB
+        const newTrack = new Music({ url: fileUrl, filename: req.file.originalname });
+        await newTrack.save();
+
+        // 4. Notify everyone via Socket
+        io.emit('newTrackAdded', fileUrl);
+        io.emit('newMessage', { sender: "RADIO", role: "admin", text: `🎵 New Track Uploaded: ${req.file.originalname}` });
+
+        res.json({ success: true, url: fileUrl });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Upload failed");
     }
 });
 
