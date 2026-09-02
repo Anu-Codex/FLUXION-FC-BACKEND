@@ -10,7 +10,6 @@ const Groq = require("groq-sdk");
 const multer = require('multer');
 const axios = require('axios');
 const FormData = require('form-data');
-const upload = multer({ storage: multer.memoryStorage() });
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 const app = express();
