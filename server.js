@@ -30,6 +30,18 @@ const apiKey = defaultClient.authentications['api-key'];
 apiKey.apiKey = process.env.BREVO_API_KEY;
 const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
 
+const upload = multer({ 
+    storage: multer.memoryStorage(),
+    fileFilter: (req, file, cb) => {
+        // Accept both .mp3 and the standard audio/mpeg type
+        if (file.mimetype === "audio/mpeg" || file.mimetype === "audio/mp3" || file.originalname.endsWith('.mp3')) {
+            cb(null, true);
+        } else {
+            cb(new Error("Only .mp3 files are allowed!"), false);
+        }
+    }
+});
+
 // --- SCHEMAS ---
 const userSchema = new mongoose.Schema({
     name: String,
