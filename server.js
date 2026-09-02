@@ -483,7 +483,29 @@ io.on('connection', async (socket) => {
     // --- NEW: AUTHENTICATION EVENTS ---
 
     
+// --- HANDLE DIRECT CLOUD LINKS FROM ADMIN ---
+socket.on('addMusicTrack', async (data) => {
+    try {
+        const { url, name } = data;
 
+        // 1. Save URL to Database
+        const newTrack = new Music({ url: url, filename: name || "Custom Track" });
+        await newTrack.save();
+
+        // 2. Force push the new song to everyone's active loop
+        io.emit('newTrackAdded', url);
+
+        // 3. Log to chat
+        io.emit('newMessage', { 
+            sender: "SYSTEM", 
+            role: "admin", 
+            text: `🎵 Radio Sync: New track [${name}] has been added to rotation.` 
+        });
+
+    } catch (err) {
+        console.error("Music Socket Error:", err);
+    }
+});
     // 2. Special Sign In (Captain/Admin)
     socket.on('specialSignIn', async ({ email, password, type }) => {
     try {
