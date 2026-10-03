@@ -1248,6 +1248,28 @@ socket.on('updatePlayerImage', async ({ playerId, imageUrl }) => {
         socket.emit('errorMsg', "Failed to update image");
     }
 });
+    // --- CLEAR ALL CUSTOM MUSIC TRACKS ---
+socket.on('clearAllMusic', async () => {
+    try {
+        // Delete all records from the Music collection
+        await Music.deleteMany({});
+        
+        // Broadcast clear event to all connected clients
+        io.emit('musicCleared');
+
+        // Log to system chat
+        io.emit('newMessage', { 
+            sender: "SYSTEM", 
+            role: "admin", 
+            text: `🗑️ Radio Reset: All custom music tracks were cleared from the database.` 
+        });
+
+        console.log("🗑️ All custom music tracks deleted by admin.");
+    } catch (err) {
+        console.error("Clear Music Error:", err);
+        socket.emit('errorMsg', "Failed to clear music tracks.");
+    }
+});
 });
 
 server.listen(process.env.PORT || 3000, () => console.log("Server Running"));
