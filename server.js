@@ -466,18 +466,24 @@ app.post('/api/upload-music', upload.single('audio'), async (req, res) => {
 // --- SOCKETS ---
 io.on('connection', async (socket) => {
     
-    // All stats and initial data fetching goes here
+    // ⬇️ FIXED: The array items MUST match the variable order exactly ⬇️
     const [players, teams, chats, stats, history, customMusic] = await Promise.all([
         Player.find(),
         Team.find(),
-        Music.find(),
-        Chat.find().sort({ timestamp: 1 }).limit(50),
-        getStatsObject(),
-        History.find().sort({ timestamp: 1 }).limit(70)
+        Chat.find().sort({ timestamp: 1 }).limit(50), // 3. chats
+        getStatsObject(),                            // 4. stats
+        History.find().sort({ timestamp: 1 }).limit(70),// 5. history
+        Music.find()                                 // 6. customMusic
     ]);
 
     socket.emit('initialData', {
-        players, teams, chats, state: auctionState, stats, history, customMusic: customMusic.map(m => m.url)
+        players, 
+        teams, 
+        chats, 
+        state: auctionState, 
+        stats, 
+        history, 
+        customMusic: customMusic.map(m => m.url) // Now correctly maps music URLs!
     });
 
     // --- NEW: AUTHENTICATION EVENTS ---
