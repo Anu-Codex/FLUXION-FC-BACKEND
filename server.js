@@ -56,12 +56,16 @@ const userSchema = new mongoose.Schema({
 });
 
 const playerSchema = new mongoose.Schema({
-    name: String, strength: Number, cardType: String, baseValue: Number,
-    phone: Number,
+    name: String, 
+    strength: Number, 
+    cardType: String, 
+    baseValue: Number,
+    phone: String,     // String avoids numeric precision/overflow issues with country codes
+    ranking: Number,   // Stores the division/global rank
     imageUrl: String,
-    status: { type: String, default: 'Available' }, soldTo: { type: String, default: '-' }
+    status: { type: String, default: 'Available' }, 
+    soldTo: { type: String, default: '-' }
 });
-
 const teamSchema = new mongoose.Schema({ 
     name: String, 
     budget: Number,
@@ -659,16 +663,23 @@ socket.on('createNewTeam', async ({ name, budget }) => {
     // --- PREVIOUS AUCTION FUNCTIONS (UNTOUCHED) ---
 
     socket.on('addPlayer', async (data) => {
-        try {
-            const newPlayer = new Player({ ...data, strength: Number(data.strength), baseValue: Number(data.baseValue),
-            phone: Number(data.phone),
-            imageUrl: data.imageUrl  
-            });
-            await newPlayer.save();
-            await broadcastStats();
-            io.emit('updatePlayers', await Player.find()); 
-        } catch (err) { console.error(err); }
-    });
+    try {
+        const newPlayer = new Player({ 
+            name: data.name,
+            strength: Number(data.strength) || 3000,
+            cardType: data.cardType || 'EPIC',
+            baseValue: Number(data.baseValue) || 10,
+            phone: String(data.phone || ""),
+            ranking: Number(data.ranking) || 0,
+            imageUrl: data.imageUrl || ""
+        });
+        await newPlayer.save();
+        await broadcastStats();
+        io.emit('updatePlayers', await Player.find()); 
+    } catch (err) { 
+        console.error("Add Player Error:", err); 
+    }
+});
 
     // Add 'isHidden' to the arguments list here:
 socket.on('startAuction', async ({ playerId, baseValue, isHidden }) => { 
