@@ -733,36 +733,83 @@ socket.on('startAuction', async ({ playerId, baseValue, isHidden }) => {
 });
 
     socket.on('placeBid', async ({ teamName, increment }) => {
-    // 1. Check if they already skipped
-    if (auctionState.skippedTeams.includes(teamName)) {
-        return socket.emit('errorMsg', "You skipped this round!");
-    }
+    try {
+        if (!auctionState.activePlayerId) {
+            return socket.emit('errorMsg', "No player currently on the block!");
+        }
 
-    // 2. Check if they are already the highest bidder
-    if (auctionState.highestBidder === teamName) {
-        return socket.emit('errorMsg', "You are already the highest bidder!");
-    }
+        // 1. Clean the team name
+        const cleanTeam = (teamName || "").trim();
 
-    const team = await Team.findOne({ name: teamName });
-    const playerCount = await Player.countDocuments({ soldTo: new RegExp('^' + teamName) });
+        // 2. Check if they skipped this round
+        if (auctionState.skippedTeams && auctionState.skippedTeams.includes(cleanTeam)) {
+            return socket.emit('errorMsg', "You have skipped this round!");
+        }
 
-    if (playerCount >= team.maxCapacity) {
-        return socket.emit('errorMsg', `🚫 SQUAD FULL! Limit is ${team.maxCapacity}.`);
-    }
-    const newBid = auctionState.currentBid + increment;
+        // 3. Check if already highest bidder
+        if (auctionState.highestBidder === cleanTeam) {
+            return socket.emit('errorMsg', "You are already the highest bidder!");
+        }
 
-    if (team && team.budget >= newBid) {
+        // 4. Find franchise using Case-Insensitive regex match
+        const team = await Team.findOne({ 
+            name: { $regex: new RegExp(`^${cleanTeam}$`, 'i') } 
+        });
+
+        if (!team) {
+            console.log(`[BID ERROR] Team not found for: "${cleanTeam}"`);
+            return socket.emit('errorMsg', `Team profile "${cleanTeam}" not found in database.`);
+        }
+
+        // 5. Check squad capacity
+        const currentCount = await Player.countDocuments({ 
+            soldTo: { $regex: new RegExp('^' + cleanTeam, 'i') } 
+        });
+
+        if (currentCount >= (team.maxCapacity || 10)) {
+            return socket.emit('errorMsg', `🚫 Squad full! Maximum capacity is ${team.maxCapacity || 10}.`);
+        }
+
+        // 6. Calculate new bid & check budget
+        const inc = Number(increment) || 1;
+        const newBid = Number(auctionState.currentBid) + inc;
+
+        if (team.budget < newBid) {
+            return socket.emit('errorMsg', `🚫 Insufficient funds! You only have ${team.budget}M remaining.`);
+        }
+
+        // 7. Accept Bid
         auctionState.currentBid = newBid;
-        auctionState.highestBidder = teamName;
-
-        // --- NEW CODE ADDED HERE ---
-        // If someone bids, we cancel the Final Call and return to normal timer
+        auctionState.highestBidder = team.name; // Use canonical name from DB
         auctionState.isFinalCall = false;
         auctionState.finalCallText = "";
-        // ---------------------------
 
-        startTimer(); // This will now reset to 60s because isFinalCall is false
+        // Reset timer
+        startTimer();
+
+        // Broadcast to everyone
         io.emit('updateAuction', auctionState);
+        io.emit('newMessage', {
+            sender: "AUCTION",
+            role: "admin",
+            text: `🔨 BID: ${team.name} raised to ${newBid}M!`
+        });
+
+        console.log(`✅ Valid bid: ${team.name} -> ${newBid}M`);
+
+    } catch (err) {
+        console.error("Bid Processing Error:", err);
+        socket.emit('errorMsg', "Internal error while placing bid.");
+    }
+});
+    socket.on('reauthenticateSession', async ({ email, role }) => {
+    if (!email) return;
+    const cleanEmail = email.trim().toLowerCase();
+    const foundUser = await User.findOne({ email: cleanEmail });
+    if (foundUser) {
+        socket.userRole = foundUser.role;
+        socket.userName = foundUser.name;
+        console.log(`[AUTH] Session restored: ${foundUser.name} (${foundUser.role})`);
     }
 });
 
