@@ -1259,6 +1259,96 @@ socket.on('updatePlayerImage', async ({ playerId, imageUrl }) => {
         socket.emit('errorMsg', "Failed to update image");
     }
 });
+
+    // --- 1. GENERATE COMPLETE DATABASE BACKUP ---
+socket.on('requestDatabaseBackup', async () => {
+    if (!requireAdmin()) return;
+    try {
+        const [players, teams, chats, history, music, users] = await Promise.all([
+            Player.find().lean(),
+            Team.find().lean(),
+            Chat.find().lean(),
+            History.find().lean(),
+            Music.find().lean(),
+            User.find({ role: { $ne: 'visitor' } }).lean() // Backs up captains/admins
+        ]);
+
+        const backupData = {
+            version: "1.0",
+            exportDate: new Date().toISOString(),
+            data: { players, teams, chats, history, music, users }
+        };
+
+        socket.emit('downloadBackupData', backupData);
+        console.log("📦 Full Database Snapshot exported by Admin.");
+    } catch (err) {
+        console.error("Backup Error:", err);
+        socket.emit('errorMsg', "Failed to create database backup.");
+    }
+});
+
+// --- 2. RESTORE COMPLETE DATABASE FROM BACKUP ---
+socket.on('restoreDatabaseFromBackup', async (backupPayload) => {
+    if (!requireAdmin()) return;
+    try {
+        if (!backupPayload || !backupPayload.data) {
+            return socket.emit('errorMsg', "Invalid Backup file structure.");
+        }
+
+        console.log("🔄 Initiating Emergency Database Recovery...");
+        const { players, teams, chats, history, music, users } = backupPayload.data;
+
+        // 1. Wipe current tables clean to prevent duplicate _id conflicts
+        await Promise.all([
+            Player.deleteMany({}),
+            Team.deleteMany({}),
+            Chat.deleteMany({}),
+            History.deleteMany({}),
+            Music.deleteMany({}),
+            User.deleteMany({ role: { $ne: 'visitor' } })
+        ]);
+
+        // 2. Restore all data from the snapshot
+        if (players && players.length) await Player.insertMany(players);
+        if (teams && teams.length) await Team.insertMany(teams);
+        if (chats && chats.length) await Chat.insertMany(chats);
+        if (history && history.length) await History.insertMany(history);
+        if (music && music.length) await Music.insertMany(music);
+        if (users && users.length) await User.insertMany(users);
+
+        // 3. Reset live auction state
+        auctionState = { 
+            activePlayerId: null, 
+            currentBid: 0, 
+            highestBidder: 'No Bids Yet', 
+            timeLeft: 20,
+            skippedTeams: [],
+            isFinalCall: false,
+            finalCallText: ""
+        };
+
+        // 4. Broadcast the recovered data globally to all screens
+        const allPlayers = await Player.find();
+        const allTeams = await Team.find();
+        const allStats = await getStatsObject();
+
+        io.emit('updatePlayers', allPlayers);
+        io.emit('updateTeams', allTeams);
+        io.emit('updateGlobalStats', allStats);
+        io.emit('updateAuction', auctionState);
+        
+        io.emit('newMessage', {
+            sender: "SYSTEM",
+            role: "admin",
+            text: "♻️ SYSTEM RESTORE: Database was successfully recovered from a previous backup."
+        });
+
+        socket.emit('restoreCompleteSuccess', `Successfully restored ${players.length} players, ${teams.length} teams, and accounts!`);
+    } catch (err) {
+        console.error("Restore Error:", err);
+        socket.emit('errorMsg', "Restoration Failed: " + err.message);
+    }
+});
     // --- CLEAR ALL CUSTOM MUSIC TRACKS ---
 socket.on('clearAllMusic', async () => {
     try {
